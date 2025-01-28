@@ -10,12 +10,27 @@ JSON data often comes from unreliable sources like:
   - Streaming APIs that send partial data over time.
   - Logging systems that may truncate JSON outputs.
 
-JResin ensures that you can process and use the valid parts of JSON even if it’s incomplete.
+JResin ensures that you can process and use the valid parts of JSON even if it’s incomplete. It is, however, a simplified solution and will not fix every possible JSON formatting issue.
 
 ## Installation
 
-Just drop the `JResin.cs` file into your project and call the Repair method.
+Just drop the `JResin.cs` file into your project and call the `JResin.Json.Repair` method.
 
-## Note
+## Usage Example
 
-This project is WORK IN PROGRESS.
+### Code
+
+```csharp
+var json = """
+           [   1, 9,8,1, ["hello", "worl
+           """;
+Console.WriteLine(json);
+var repairedJson = JResin.Json.Repair(json);
+Console.WriteLine(repairedJson);
+```
+
+### Output
+```
+[   1, 2,3,4, ["hello", "worl            
+[1,2,3,4,["hello","worl"]]
+```
