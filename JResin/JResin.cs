@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
-// JResin v1.0
+// JResin v1.1
 
 namespace JResin
 {
@@ -140,6 +140,7 @@ namespace JResin
                     return false;
 
                 var startIndex = index;
+                var lastSafeIndex = index + 1; // Position after the opening quote
                 index++; // Skip the initial double quote
 
                 while (index < json.Length)
@@ -158,10 +159,14 @@ namespace JResin
                     // If a backslash is found, handle the escape sequence
                     if (c == '\\')
                     {
+                        var escapeStartIndex = index;
                         index++;
                         if (index >= json.Length)
-                            // If the string ends right after a backslash, we might choose to forcibly close it
-                            break; // We'll jump to "incomplete" logic below
+                        {
+                            // String ends right after a backslash - truncate before the backslash
+                            index = escapeStartIndex;
+                            break;
+                        }
 
                         var escapeChar = json[index];
                         switch (escapeChar)
@@ -175,57 +180,68 @@ namespace JResin
                             case 'r':
                             case 't':
                                 // Valid single-character escapes
+                                index++;
+                                lastSafeIndex = index;
                                 break;
                             case 'u':
                                 // Unicode escape sequence: \uXXXX
                                 if (index + 4 >= json.Length)
                                 {
-                                    // Not enough room for 4 hex digits → incomplete
-                                    index = json.Length;
+                                    // Not enough room for 4 hex digits → truncate before backslash
+                                    index = escapeStartIndex;
                                     break;
                                 }
 
                                 string hex = json.Substring(index + 1, 4);
                                 if (!int.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
                                 {
-                                    // Malformed hex
-                                    index = json.Length;
+                                    // Malformed hex - truncate before backslash
+                                    index = escapeStartIndex;
                                     break;
                                 }
-                                index += 4;
+                                index += 5; // Skip 'u' and 4 hex digits
+                                lastSafeIndex = index;
                                 break;
                             default:
-                                // Invalid escape sequence → 
-                                // we could break or forcibly try to keep going
-                                index = json.Length;
+                                // Invalid escape sequence - truncate before backslash
+                                index = escapeStartIndex;
                                 break;
                         }
-                        index++;
+
+                        // If we didn't advance past the escape start, we hit an error
+                        if (index == escapeStartIndex)
+                        {
+                            // Mark that we've consumed all usable input
+                            index = json.Length;
+                            break;
+                        }
                     }
                     else
                     {
                         // For a valid JSON string, characters below ASCII code 32 must be escaped
-                        if (c < 32) 
+                        if (c < 32)
                         {
-                            // We can treat this as an error or forcibly continue
-                            index = json.Length;
+                            // Truncate before the control character
                             break;
                         }
-                        
+
                         index++;
+                        lastSafeIndex = index;
                     }
                 }
 
                 // If we got here, it means the string was never closed (or had a broken escape),
                 // so we forcibly "close" it with a quote.
-                // We include everything from the original starting point to the current `index`.
-                // Then add a double quote to mimic a closed string.
+                // Use lastSafeIndex to exclude any incomplete escape sequences.
 
-                // Append everything up to current position (which might be end of JSON)
-                result.Append(json[startIndex..index]);
+                // Append everything up to the last safe position (excludes incomplete escapes)
+                result.Append(json[startIndex..lastSafeIndex]);
 
                 // Now force a closing quote
                 result.Append('"');
+
+                // Mark that we've consumed all input
+                index = json.Length;
 
                 return true;
             }
@@ -237,6 +253,28 @@ namespace JResin
             bool ConsumeNumber()
             {
                 string substring = json[index..];
+
+                // First, check for incomplete number patterns at end of input
+                // These are numbers that would be valid if more characters followed
+                if (substring == "-" ||
+                    substring.EndsWith('.') ||
+                    substring.EndsWith('e') ||
+                    substring.EndsWith('E') ||
+                    substring.EndsWith("e-") ||
+                    substring.EndsWith("e+") ||
+                    substring.EndsWith("E-") ||
+                    substring.EndsWith("E+"))
+                {
+                    // Verify it looks like a number pattern (starts correctly)
+                    var numberStartRegex = new Regex(@"^-?\d");
+                    if (substring == "-" || numberStartRegex.IsMatch(substring))
+                    {
+                        result.Append("null");
+                        index = json.Length;
+                        return true;
+                    }
+                }
+
                 var regex = new Regex(@"^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?");
                 var match = regex.Match(substring);
                 if (!match.Success)
@@ -300,7 +338,7 @@ namespace JResin
                     }
 
                     // After the key, we expect a colon
-                    if (!ConsumeWhitespace()) return false;
+                    ConsumeWhitespace();
                     if (index < json.Length && json[index] == ':')
                     {
                         result.Append(':');
@@ -339,6 +377,9 @@ namespace JResin
 
                 // If we reach here, it means the object was never properly closed.
                 // We'll pop the object from the stack and insert a '}' to close it.
+                // Remove trailing comma if present
+                if (result.Length > 0 && result[^1] == ',')
+                    result.Length--;
                 stack.Pop();
                 result.Append('}');
                 return true;
@@ -380,13 +421,16 @@ namespace JResin
                 }
 
                 // If the input ends without a closing bracket, add it to the result
+                // Remove trailing comma if present
+                if (result.Length > 0 && result[^1] == ',')
+                    result.Length--;
                 stack.Pop();
                 result.Append(']');
                 return true;
             }
 
             // Checks if the next 4 characters match "true". If so, appends "true" to the result
-            // and advances the index.
+            // and advances the index. Handles partial matches at end of input.
             bool ConsumeTrue()
             {
                 if (json.Length - index >= 4 && json[index..(index + 4)] == "true")
@@ -395,11 +439,19 @@ namespace JResin
                     index += 4;
                     return true;
                 }
+                // Handle partial "true" at end of input
+                var remaining = json[index..];
+                if ("true".StartsWith(remaining) && remaining.Length < 4)
+                {
+                    result.Append("null");
+                    index = json.Length;
+                    return true;
+                }
                 return false;
             }
 
             // Checks if the next 5 characters match "false". If so, appends "false" to the result
-            // and advances the index.
+            // and advances the index. Handles partial matches at end of input.
             bool ConsumeFalse()
             {
                 if (json.Length - index >= 5 && json[index..(index + 5)] == "false")
@@ -408,17 +460,33 @@ namespace JResin
                     index += 5;
                     return true;
                 }
+                // Handle partial "false" at end of input
+                var remaining = json[index..];
+                if ("false".StartsWith(remaining) && remaining.Length < 5)
+                {
+                    result.Append("null");
+                    index = json.Length;
+                    return true;
+                }
                 return false;
             }
 
             // Checks if the next 4 characters match "null". If so, appends "null" to the result
-            // and advances the index.
+            // and advances the index. Handles partial matches at end of input.
             bool ConsumeNull()
             {
                 if (json.Length - index >= 4 && json[index..(index + 4)] == "null")
                 {
                     result.Append("null");
                     index += 4;
+                    return true;
+                }
+                // Handle partial "null" at end of input
+                var remaining = json[index..];
+                if ("null".StartsWith(remaining) && remaining.Length < 4)
+                {
+                    result.Append("null");
+                    index = json.Length;
                     return true;
                 }
                 return false;

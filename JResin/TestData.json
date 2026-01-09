@@ -1,0 +1,71 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "generated": true,
+    "count": 42,
+    "rating": 3.14159,
+    "negativeValue": -273.15,
+    "scientific": 6.022e23,
+    "negativeExp": 1.6e-19
+  },
+  "users": [
+    {
+      "id": 1,
+      "name": "Alice \"The Great\"",
+      "email": "alice@example.com",
+      "active": true,
+      "balance": null,
+      "tags": ["admin", "user", "vip"],
+      "profile": {
+        "bio": "Line1\nLine2\tTabbed",
+        "website": "https://example.com/path?query=value&other=123",
+        "unicode": "\u0048\u0065\u006c\u006c\u006f"
+      }
+    },
+    {
+      "id": 2,
+      "name": "Bob\\Builder",
+      "email": "bob@example.com",
+      "active": false,
+      "balance": 1000.50,
+      "tags": [],
+      "profile": {
+        "bio": "Backslash: \\ Quote: \" Slash: /",
+        "website": null,
+        "unicode": "\u4e2d\u6587"
+      }
+    }
+  ],
+  "matrix": [
+    [1, 2, 3],
+    [4, 5, 6],
+    [7, 8, 9]
+  ],
+  "deeply": {
+    "nested": {
+      "structure": {
+        "with": {
+          "many": {
+            "levels": {
+              "value": "found it!",
+              "array": [true, false, null, 0, -1, "text"]
+            }
+          }
+        }
+      }
+    }
+  },
+  "emptyObject": {},
+  "emptyArray": [],
+  "specialStrings": [
+    "",
+    " ",
+    "\"quoted\"",
+    "back\\slash",
+    "new\nline",
+    "tab\there",
+    "carriage\rreturn",
+    "form\ffeed",
+    "back\bspace"
+  ]
+}

@@ -31,6 +31,24 @@ Console.WriteLine(repairedJson);
 
 ### Output
 ```
-[   1, 2,3,4, ["hello", "worl            
+[   1, 2,3,4, ["hello", "worl
 [1,2,3,4,["hello","worl"]]
 ```
+
+## Testing
+
+Run the test suite:
+
+```bash
+dotnet run --project JResin\JResin.csproj
+```
+
+The test suite includes:
+
+- **Exhaustive truncation test** - Truncates a complex JSON file at every position (1 to N) and verifies each repair produces valid JSON
+- **Edge case tests** - Specific tests for known problematic patterns:
+  - Truncation before colons, mid-string, mid-number
+  - Incomplete escape sequences (`\`, `\u00`)
+  - Incomplete literals (`tru`, `fal`, `nul`)
+  - Incomplete numbers (`-`, `12.`, `1.5e`, `1.5e-`)
+  - Nested structures, trailing commas, and more
